@@ -12,6 +12,9 @@ std::map<CString, int> count_occurrences(const std::vector<CString>& parts)
 
 void save_to_file(std::filesystem::path path, std::vector<CString> const& parts)
 {
+	if (parts.empty())
+		return; 
+
 	std::map<CString, int> occurrence_counts = count_occurrences(parts);
 
 	std::vector<std::pair<CString, int>> sorted_counts(occurrence_counts.begin(), occurrence_counts.end());
