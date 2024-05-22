@@ -3,11 +3,11 @@
 
 namespace
 {
-	typedef int TYPE_ONE;
+	typedef int utf16_character;
 
 	enum surrogate16_type { surrogate16_none, surrogate16_first_in_pair, surrogate16_second_in_pair };
 
-	surrogate16_type function_one(TCHAR ch)
+	surrogate16_type detect_surrogate_type(TCHAR ch)
 	{
 		if (ch >= 0xD800 && ch < 0xE000)
 		{
@@ -18,21 +18,21 @@ namespace
 		return surrogate16_none;
 	}
 
-	std::vector<TYPE_ONE> function_two(const CString &s)
+	std::vector<utf16_character> remove_surrogate_pairs(const CString &s) 
 	{
-		std::vector<TYPE_ONE> vResult;
+		std::vector<utf16_character> vResult;
 		for (int i = 0; i < s.GetLength();)
 		{
 			TCHAR uc = s[i];
-			if (function_one(uc) == surrogate16_none)
+			if (detect_surrogate_type(uc) == surrogate16_none)
 			{
 				vResult.push_back(uc);
 				++i;
 			}
 			else if (i + 1 <= s.GetLength() - 1)
 			{
-				if (function_one(uc) == surrogate16_first_in_pair
-					&& function_one(s[i + 1]) == surrogate16_second_in_pair)
+				if (detect_surrogate_type(uc) == surrogate16_first_in_pair
+					&& detect_surrogate_type(s[i + 1]) == surrogate16_second_in_pair)
 				{
 					vResult.push_back((uc << 10) + s[i + 1] - ((0xD800 << 10) + 0xDC00 - 0x10000));
 					i += 2;
@@ -40,6 +40,7 @@ namespace
 				else
 				{
 					ASSERT(FALSE);
+					break;
 				}
 			}
 			else
@@ -51,7 +52,7 @@ namespace
 		return vResult;
 	}
 
-	bool isValid(TYPE_ONE ch)
+	bool isValid(utf16_character ch)
 	{
 		if (ch >= 0x110000)
 			return false;
@@ -62,12 +63,12 @@ namespace
 		return true;
 	}
 
-	CString function_three(const std::vector<TYPE_ONE> &v)
+	CString convert_utf_to_string(const std::vector<utf16_character> &v) //
 	{
 		CString result;
 		for (int i = 0; i < (int)v.size(); ++i)
 		{
-			TYPE_ONE code = v[i];
+			utf16_character code = v[i];
 			if (!isValid(code))
 			{
 				ASSERT(FALSE);
@@ -88,47 +89,47 @@ namespace
 		return result;
 	}
 
-	class CClassOne
+	class RangeList
 	{
 	public:
-		CClassOne()
+		RangeList()
 		{
-			m_something.push_back(std::make_pair(0, false));
+			ranges.push_back(std::make_pair(0, false));
 		}
-		CClassOne & operator+(int nBegin)
+		RangeList& operator+(int nBegin)
 		{
-			ASSERT(m_something.back().second == false);
-			m_something.push_back(std::make_pair(nBegin, true));
-			ASSERT(m_something[m_something.size() - 1] > m_something[m_something.size() - 2]);
+			ASSERT(ranges.back().second == false);
+			ranges.push_back(std::make_pair(nBegin, true));
+			ASSERT(ranges[ranges.size() - 1] > ranges[ranges.size() - 2]);
 			return *this;
 		}
-		CClassOne & operator-(int nEnd)
+		RangeList& operator-(int nEnd)
 		{
-			ASSERT(m_something.back().second == true);
-			m_something.push_back(std::make_pair(nEnd, false));
-			ASSERT(m_something[m_something.size() - 1] > m_something[m_something.size() - 2]);
+			ASSERT(ranges.back().second == true);
+			ranges.push_back(std::make_pair(nEnd, false));
+			ASSERT(ranges[ranges.size() - 1] > ranges[ranges.size() - 2]);
 			return *this;
 		}
 		bool isContains(int n) const
 		{
 			ASSERT(n >= 0);
-			return (std::upper_bound(m_something.begin(), m_something.end(), std::make_pair(n, true)) - 1)->second;
+			return (std::upper_bound(ranges.begin(), ranges.end(), std::make_pair(n, true)) - 1)->second;
 		}
 		bool isEmpty() const
 		{
-			return m_something.size() == 1;
+			return ranges.size() == 1;
 		}
 	private:
-		std::vector<std::pair<int, bool>> m_something;
+		std::vector<std::pair<int, bool>> ranges;
 	};
 
-	BOOL function_four(TYPE_ONE nCode)
+	BOOL check_if_contains_in_range_list(utf16_character nCode)
 	{
-		static CClassOne something;
-		if (something.isEmpty())
+		static RangeList ranges_list;
+		if (ranges_list.isEmpty())
 		{
 			//Includes characters with category Punctuation, excluding character '_' (underscore)
-			something +
+			ranges_list +
 				33 - 36 + 37 - 43 + 44 - 48 + 58 - 60 + 63 - 65 + 91 - 94 + 123 - 124 + 125 - 126 + 161 - 162 + 167 - 168 + 171 - 172 + 182 - 184 + 187 - 188 + 191 - 192 + 894 - 895 + 903 - 904 + 1370 - 1376 + 1417 - 1419 + 1470 - 1471 +
 				1472 - 1473 + 1475 - 1476 + 1478 - 1479 + 1523 - 1525 + 1545 - 1547 + 1548 - 1550 + 1563 - 1564 + 1566 - 1568 + 1642 - 1646 + 1748 - 1749 + 1792 - 1806 + 2039 - 2042 + 2096 - 2111 + 2142 - 2143 + 2404 - 2406 +
 				2416 - 2417 + 2800 - 2801 + 3572 - 3573 + 3663 - 3664 + 3674 - 3676 + 3844 - 3859 + 3860 - 3861 + 3898 - 3902 + 3973 - 3974 + 4048 - 4053 + 4057 - 4059 + 4170 - 4176 + 4347 - 4348 + 4960 - 4969 + 5120 - 5121 +
@@ -142,18 +143,18 @@ namespace
 				69703 - 69710 + 69819 - 69821 + 69822 - 69826 + 69952 - 69956 + 70004 - 70006 + 70085 - 70090 + 70093 - 70094 + 70107 - 70108 + 70109 - 70112 + 70200 - 70206 + 70313 - 70314 + 70854 - 70855 +
 				71105 - 71128 + 71233 - 71236 + 71484 - 71487 + 74864 - 74869 + 92782 - 92784 + 92917 - 92918 + 92983 - 92988 + 92996 - 92997 + 113823 - 113824 + 121479 - 121484;
 		}
-		if (!something.isContains(nCode))
+		if (!ranges_list.isContains(nCode))
 			return FALSE;
 		return TRUE;
 	}
-	BOOL function_five(TYPE_ONE nCode)
+	BOOL check_if_contains_in_extended_range_list(utf16_character nCode)
 	{
-		static CClassOne something;
-		if (something.isEmpty())
+		static RangeList ranges_list;
+		if (ranges_list.isEmpty())
 		{
 			//Includes characters with categories Letter Number Mark Punctuation, character '_' (underscore)
 			//and InEnclosedAlphanumerics (characters with codes  U+2460..U+24FF including U+24FF).
-			something +
+			ranges_list +
 				33 - 36 + 37 - 43 + 44 - 60 + 63 - 94 + 95 - 96 + 97 - 124 + 125 - 126 + 161 - 162 + 167 - 168 + 170 - 172 + 178 - 180 + 181 - 184 + 185 - 215 + 216 - 247 + 248 - 706 + 710 - 722 + 736 - 741 + 748 - 749 + 750 - 751 + 768 - 885 +
 				886 - 888 + 890 - 896 + 902 - 907 + 908 - 909 + 910 - 930 + 931 - 1014 + 1015 - 1154 + 1155 - 1328 + 1329 - 1367 + 1369 - 1376 + 1377 - 1416 + 1417 - 1419 + 1425 - 1480 + 1488 - 1515 + 1520 - 1525 + 1545 - 1547 +
 				1548 - 1550 + 1552 - 1564 + 1566 - 1757 + 1759 - 1769 + 1770 - 1789 + 1791 - 1806 + 1808 - 1867 + 1869 - 1970 + 1984 - 2038 + 2039 - 2043 + 2048 - 2094 + 2096 - 2111 + 2112 - 2140 + 2142 - 2143 + 2208 - 2229 +
@@ -207,60 +208,60 @@ namespace
 				126561 - 126563 + 126564 - 126565 + 126567 - 126571 + 126572 - 126579 + 126580 - 126584 + 126585 - 126589 + 126590 - 126591 + 126592 - 126602 + 126603 - 126620 + 126625 - 126628 +
 				126629 - 126634 + 126635 - 126652 + 127232 - 127245 + 131072 - 173783 + 173824 - 177973 + 177984 - 178206 + 178208 - 183970 + 194560 - 195102 + 917760 - 918000;
 		}
-		if (!something.isContains(nCode))
+		if (!ranges_list.isContains(nCode))
 			return FALSE;
 		return TRUE;
 	}
 
-	std::vector<CString> function_six(CString s)
+	std::vector<CString> process_and_filter_string(CString s) 
 	{
-		std::vector<TYPE_ONE> something_one = function_two(s);
+		std::vector<utf16_character> codes_list = remove_surrogate_pairs(s);
 		std::vector<CString> result;
-		std::vector<TYPE_ONE> something_two;
-		BOOL something_three = TRUE;
-		for (int i = 0; i <= (int)something_one.size(); ++i)
+		std::vector<utf16_character> valid_codes;
+		BOOL something_three = TRUE; //Unused, может использоваться в разных местах, основной вариант: has_invalid_code  
+		for (int i = 0; i <= (int)codes_list.size(); ++i)
 		{
-			if (i != (int)something_one.size() && function_five(something_one[i]))
+			if (i != (int)codes_list.size() && check_if_contains_in_extended_range_list(codes_list[i]))
 			{
-				something_two.push_back(something_one[i]);
+				valid_codes.push_back(codes_list[i]);
 			}
 			else
 			{
-				while (!something_two.empty() && function_four(something_two.front()))
-					something_two.erase(something_two.begin());
-				while (!something_two.empty() && function_four(something_two.back()))
-					something_two.pop_back();
+				while (!valid_codes.empty() && check_if_contains_in_range_list(valid_codes.front()))
+					valid_codes.erase(valid_codes.begin());
+				while (!valid_codes.empty() && check_if_contains_in_range_list(valid_codes.back()))
+					valid_codes.pop_back();
 
-				if (something_two.empty())
+				if (valid_codes.empty())
 					continue;
 
-				result.push_back(function_three(something_two));
+				result.push_back(convert_utf_to_string(valid_codes));
 
-				BOOL something_four = FALSE;
-				for (int j = 0; !something_four && j < (int)something_two.size(); ++j)
-					if (function_four(something_two[j]))
-						something_four = TRUE;
+				BOOL range_validity_flag = FALSE;
+				for (int j = 0; !range_validity_flag && j < (int)valid_codes.size(); ++j)
+					if (check_if_contains_in_range_list(valid_codes[j]))
+						range_validity_flag = TRUE;
 
-				if (something_four)
+				if (range_validity_flag)
 				{
-					std::vector<TYPE_ONE> something_five;
-					for (int j = 0; j <= (int)something_two.size(); ++j)
+					std::vector<utf16_character> filter_for_result;
+					for (int j = 0; j <= (int)valid_codes.size(); ++j)
 					{
-						if (j == (int)something_two.size() || function_four(something_two[j]))
+						if (j == (int)valid_codes.size() || check_if_contains_in_range_list(valid_codes[j]))
 						{
-							if (!something_five.empty())
+							if (!filter_for_result.empty())
 							{
-								result.push_back(function_three(something_five));
-								something_five.clear();
+								result.push_back(convert_utf_to_string(filter_for_result));
+								filter_for_result.clear();
 							}
 						}
 						else
 						{
-							something_five.push_back(something_two[j]);
+							filter_for_result.push_back(valid_codes[j]);
 						}
 					}
 				}
-				something_two.clear();
+				valid_codes.clear();
 			}
 		}
 		return result;
@@ -269,7 +270,7 @@ namespace
 
 std::vector<CString> load_from_file(std::filesystem::path path)
 {
-	return function_six([&] () {
+	return process_and_filter_string([&] () {
 		CString result;
 		std::ifstream in(path, std::ios::binary | std::ios::ate);
 		if (in.fail())
