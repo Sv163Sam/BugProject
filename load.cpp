@@ -3,7 +3,7 @@
 
 namespace
 {
-	typedef int utf16_character;
+	typedef int fragment;
 
 	enum surrogate16_type { surrogate16_none, surrogate16_first_in_pair, surrogate16_second_in_pair };
 
@@ -18,9 +18,9 @@ namespace
 		return surrogate16_none;
 	}
 
-	std::vector<utf16_character> remove_surrogate_pairs(const CString &s) 
+	std::vector<fragment> convert_to_unicode(const CString &s)
 	{
-		std::vector<utf16_character> vResult;
+		std::vector<fragment> vResult;
 		for (int i = 0; i < s.GetLength();)
 		{
 			TCHAR uc = s[i];
@@ -39,20 +39,18 @@ namespace
 				}
 				else
 				{
-					ASSERT(FALSE);
-					break;
+					++i;
 				}
 			}
 			else
 			{
-				ASSERT(FALSE);
-				break;
+				++i;
 			}
 		}
 		return vResult;
 	}
 
-	bool isValid(utf16_character ch)
+	bool isValid(fragment ch)
 	{
 		if (ch >= 0x110000)
 			return false;
@@ -63,12 +61,12 @@ namespace
 		return true;
 	}
 
-	CString convert_utf_to_string(const std::vector<utf16_character> &v) //
+	CString convert_from_unicode(const std::vector<fragment> &v) //
 	{
 		CString result;
 		for (int i = 0; i < (int)v.size(); ++i)
 		{
-			utf16_character code = v[i];
+			fragment code = v[i];
 			if (!isValid(code))
 			{
 				ASSERT(FALSE);
@@ -123,7 +121,7 @@ namespace
 		std::vector<std::pair<int, bool>> ranges;
 	};
 
-	BOOL check_if_contains_in_range_list(utf16_character nCode)
+	BOOL check_if_contains_in_punctuation_range_list(fragment nCode)
 	{
 		static RangeList ranges_list;
 		if (ranges_list.isEmpty())
@@ -147,7 +145,7 @@ namespace
 			return FALSE;
 		return TRUE;
 	}
-	BOOL check_if_contains_in_extended_range_list(utf16_character nCode)
+	BOOL check_if_contains_in_symbols_extended_range_list(fragment nCode)
 	{
 		static RangeList ranges_list;
 		if (ranges_list.isEmpty())
@@ -213,55 +211,55 @@ namespace
 		return TRUE;
 	}
 
-	std::vector<CString> process_and_filter_string(CString s) 
+	std::vector<CString> process_and_filter_fragments(CString s) 
 	{
-		std::vector<utf16_character> codes_list = remove_surrogate_pairs(s);
+		std::vector<fragment> codes = convert_to_unicode(s);
 		std::vector<CString> result;
-		std::vector<utf16_character> valid_codes;
+		std::vector<fragment> fragments;
 		BOOL something_three = TRUE; //Unused, может использоваться в разных местах, основной вариант: has_invalid_code  
-		for (int i = 0; i <= (int)codes_list.size(); ++i)
+		for (int i = 0; i <= (int)codes.size(); ++i)
 		{
-			if (i != (int)codes_list.size() && check_if_contains_in_extended_range_list(codes_list[i]))
+			if (i != (int)codes.size() && check_if_contains_in_symbols_extended_range_list(codes[i]))
 			{
-				valid_codes.push_back(codes_list[i]);
+				fragments.push_back(codes[i]);
 			}
 			else
 			{
-				while (!valid_codes.empty() && check_if_contains_in_range_list(valid_codes.front()))
-					valid_codes.erase(valid_codes.begin());
-				while (!valid_codes.empty() && check_if_contains_in_range_list(valid_codes.back()))
-					valid_codes.pop_back();
+				while (!fragments.empty() && check_if_contains_in_punctuation_range_list(fragments.front()))
+					fragments.erase(fragments.begin());
+				while (!fragments.empty() && check_if_contains_in_punctuation_range_list(fragments.back()))
+					fragments.pop_back();
 
-				if (valid_codes.empty())
+				if (fragments.empty())
 					continue;
 
-				result.push_back(convert_utf_to_string(valid_codes));
+				result.push_back(convert_from_unicode(fragments));
 
 				BOOL range_validity_flag = FALSE;
-				for (int j = 0; !range_validity_flag && j < (int)valid_codes.size(); ++j)
-					if (check_if_contains_in_range_list(valid_codes[j]))
+				for (int j = 0; !range_validity_flag && j < (int)fragments.size(); ++j)
+					if (check_if_contains_in_punctuation_range_list(fragments[j]))
 						range_validity_flag = TRUE;
 
 				if (range_validity_flag)
 				{
-					std::vector<utf16_character> filter_for_result;
-					for (int j = 0; j <= (int)valid_codes.size(); ++j)
+					std::vector<fragment> extended_fragments;
+					for (int j = 0; j <= (int)fragments.size(); ++j)
 					{
-						if (j == (int)valid_codes.size() || check_if_contains_in_range_list(valid_codes[j]))
+						if (j == (int)fragments.size() || check_if_contains_in_punctuation_range_list(fragments[j]))
 						{
-							if (!filter_for_result.empty())
+							if (!extended_fragments.empty())
 							{
-								result.push_back(convert_utf_to_string(filter_for_result));
-								filter_for_result.clear();
+								result.push_back(convert_from_unicode(extended_fragments)); 
+								extended_fragments.clear();
 							}
 						}
 						else
 						{
-							filter_for_result.push_back(valid_codes[j]);
+							extended_fragments.push_back(fragments[j]);
 						}
 					}
 				}
-				valid_codes.clear();
+				fragments.clear();
 			}
 		}
 		return result;
@@ -270,7 +268,7 @@ namespace
 
 std::vector<CString> load_from_file(std::filesystem::path path)
 {
-	return process_and_filter_string([&] () {
+	return process_and_filter_fragments([&] () {
 		CString result;
 		std::ifstream in(path, std::ios::binary | std::ios::ate);
 		if (in.fail())
